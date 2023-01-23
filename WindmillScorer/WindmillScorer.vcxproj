@@ -201,14 +201,17 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Config.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WindmillScorer.h" />
     <ClInclude Include="WindmillScorerDlg.h" />
+    <ClInclude Include="WMAScorer.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Config.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -217,9 +220,13 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     </ClCompile>
     <ClCompile Include="WindmillScorer.cpp" />
     <ClCompile Include="WindmillScorerDlg.cpp" />
+    <ClCompile Include="WMAScorer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WindmillScorer.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\WindmillScorer.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

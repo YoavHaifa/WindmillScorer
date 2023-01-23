@@ -10,7 +10,10 @@
 #include "..\..\yUtils\MyWindows.h"
 #include "..\..\yUtils\MyFileDialog.h"
 #include "..\..\ImageRLib\ImageRIF.h"
-#include "..\..\ImageRLib\ArchivesImages.h"
+#include "..\..\ImageRLib\Position.h"
+#include "..\..\ImageRLib\MultiDataF.h"
+#include "Config.h"
+#include "WMAScorer.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -55,10 +58,11 @@ END_MESSAGE_MAP()
 
 
 CWindmillScorerDlg::CWindmillScorerDlg(CWnd* pParent /*=nullptr*/)
-	: CDialogEx(IDD_WINDMILLSCORER_DIALOG, pParent)
-	, mpHRImages(NULL)
-	, mpLRImages(NULL)
+	: CMyDialogEx(IDD_WINDMILLSCORER_DIALOG, pParent)
 	, mpImageRIF(NULL)
+	, mfLog("WindmillScorerDlg")
+	, miPos(0)
+	, miPos2d(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -67,12 +71,10 @@ CWindmillScorerDlg::~CWindmillScorerDlg()
 {
 	if (mpImageRIF)
 		delete mpImageRIF;
-
-	if (mpHRImages)
-		delete mpHRImages;
-
-	if (mpLRImages)
-		delete mpLRImages;
+	if (mfLog)
+	{
+		mfLog.Flush("\n<~CWindmillScorerDlg>");
+	}
 }
 
 void CWindmillScorerDlg::DoDataExchange(CDataExchange* pDX)
@@ -86,6 +88,9 @@ BEGIN_MESSAGE_MAP(CWindmillScorerDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_COMMAND(ID_FILE_EXIT, &CWindmillScorerDlg::OnFileExit)
 	ON_COMMAND(ID_FILE_OPENHIGHRESVOLUME, &CWindmillScorerDlg::OnFileOpenhighresvolume)
+	ON_COMMAND(ID_FILE_OPENLOWRESVOLUME, &CWindmillScorerDlg::OnFileOpenlowresvolume)
+	ON_BN_CLICKED(IDC_BUTTON_UPDATE, &CWindmillScorerDlg::OnBnClickedButtonUpdate)
+	ON_COMMAND(ID_FILE_OPENLASTSELECTION, &CWindmillScorerDlg::OnFileOpenlastselection)
 END_MESSAGE_MAP()
 
 
@@ -121,6 +126,7 @@ BOOL CWindmillScorerDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	SetStatusWindow(IDC_STATIC_STATUS);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -184,24 +190,37 @@ void CWindmillScorerDlg::OnFileExit()
 
 void CWindmillScorerDlg::OnFileOpenhighresvolume()
 {
-	CString sPath("d:\\DLIR_V311\\Test Data");
-	CMyFileDialog dlg(CMyFileDialog::FD_OPEN, "Select one image from High Resolution Volume", sPath);
+	if (gWMAScorer.mpHRImages)
+		return;
+
+	CMyFileDialog dlg(CMyFileDialog::FD_OPEN, "Select one image from High Resolution Volume", gConfig.msDataRoot);
 	if (!dlg.DoModal())
 		return;
 
-	CString sHRImageName = dlg.mSelectedFileName;
-	//CMyWindows::MessBox(sHRImageName, "Selected Folder");
-
-	mpHRImages = new CArchivesImages(sHRImageName);
-	miCurrent = mpHRImages->GetNFiles() / 2;
-	mpHRImages->SetCurrent(miCurrent);
-	mnLines = mpHRImages->GetNLinesInPage();
-	mnCols = mpHRImages->GetNCols();
-	mnPixelsPerImage = mpHRImages->GetNPixelsPerImage();
+	gWMAScorer.SetHRVolume(dlg.mSelectedFileName);
 
 	LoadImageR();
 }
 
+void CWindmillScorerDlg::OnFileOpenlowresvolume()
+{
+	if (!gWMAScorer.mpHRImages)
+		return;
+	if (gWMAScorer.mpLRImages)
+		return;
+
+	CMyFileDialog dlg(CMyFileDialog::FD_OPEN, "Select one image from Low Resolution Volume", gConfig.msDataRoot);
+	if (!dlg.DoModal())
+		return;
+
+	gWMAScorer.SetLRVolume(dlg.mSelectedFileName);
+	OnLRVolumeSet();
+}
+void CWindmillScorerDlg::OnLRVolumeSet()
+{
+	mpImageRIF->FileOpen(gWMAScorer.mpLRImages->Name());
+	mpImageRIF->AddDiff();
+}
 bool CWindmillScorerDlg::LoadImageR()
 {
 	if (mpImageRIF)
@@ -213,6 +232,74 @@ bool CWindmillScorerDlg::LoadImageR()
 	//mpImageRIF = new CImageRIF(0, 0, false, gConfig.mDefaultImageRScreenX, gConfig.mDefaultImageRScreenY);
 	mpImageRIF = new CImageRIF(0, 0, false);
 	mpImageRIF->SetTitle("Windmill Scorer Viewer");
-	mpImageRIF->FileOpen(mpHRImages->GetCurrentImageName());
+	CString sfName(gWMAScorer.mpHRImages->Name());
+	mpImageRIF->FileOpen(sfName);
+	mpImageRIF->SetPosition(sfName, gWMAScorer.GetCurrent());
+	mpImageRIF->SetViewerBroadPos();
+	mpImageRIF->SetIndicesToUpdatePosition2d(miPos, miPos2d);
+	mpImageRIF->SetWindow(100, 500);
 	return true;
+}
+
+LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+{
+	char zBuf[128];
+	if (mpImageRIF)
+	{
+		mfLog.Printf("<WindowProc> Message %d (%3d %3d)\n", message, wParam, lParam);
+		bool bChange = false;
+		if (mpImageRIF->GetPositionMessage(message, wParam, lParam, bChange))
+		{
+			if (bChange)
+			{
+				if (message == CPosition::umaPositionMsg[0])
+					mfLog.Printf("<WindowProc> PositionMsg 0 ID %d pos %d\n",
+						(int)lParam, (int)wParam);
+				else if (message == CPosition::umaPositionMsg[1])
+					mfLog.Printf("<WindowProc> PositionMsg 1 ID %d pos %d\n",
+						(int)lParam, (int)wParam);
+				mfLog.Printf("<WindowProc> Pos (%3d %3d)\n", miPos, miPos2d);
+
+				//DisplayPos();
+				sprintf_s(zBuf, sizeof(zBuf), "<WindowProc> Position Messgae %d %d", (int)wParam, (int)lParam);
+				CMyWindows::PrintStatus(zBuf);
+				/*
+				if (mpImages)
+				{
+					CPosition* pPosition = mpImages->GetPosition();
+					if (miPos >= pPosition->miFirst && miPos <= pPosition->miLast)
+						mpImages->SetCurrent(miPos);
+				}*/
+				//if (mpSmoother)
+				//	UpdateSmooth();
+			}
+			return 0;
+		}
+	}
+
+	return CDialog::WindowProc(message, wParam, lParam);
+}
+
+void CWindmillScorerDlg::OnBnClickedButtonUpdate()
+{
+	if (!gWMAScorer.mpLRImages)
+		return;
+
+	int iImage = -1;
+	if (GetParameter(IDC_EDIT_I_IMAGE, iImage))
+	{
+		mpImageRIF->SetPosition(gWMAScorer.mpHRImages->Name(), iImage);
+		gWMAScorer.SetCurrent(iImage);
+		float score = gWMAScorer.ComputeScore();
+		SetParameter(IDC_EDIT_SCORE, score);
+	}
+}
+
+void CWindmillScorerDlg::OnFileOpenlastselection()
+{
+	if (!gWMAScorer.OpenLastSelection())
+		return;
+
+	LoadImageR();
+	OnLRVolumeSet();
 }

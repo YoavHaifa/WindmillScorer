@@ -3,10 +3,12 @@
 //
 
 #pragma once
+#include "..\..\yUtils\MyDialogEx.h"
+#include "..\..\yUtils\LogFile.h"
 
 
 // CWindmillScorerDlg dialog
-class CWindmillScorerDlg : public CDialogEx
+class CWindmillScorerDlg : public CMyDialogEx
 {
 // Construction
 public:
@@ -26,14 +28,13 @@ public:
 protected:
 	HICON m_hIcon;
 	class CImageRIF* mpImageRIF;
-	class CArchivesImages* mpHRImages;
-	class CArchivesImages* mpLRImages;
-	int miCurrent;
-	int mnLines;
-	int mnCols;
-	int mnPixelsPerImage;
+	CLogFile mfLog;
+	int miPos;
+	int miPos2d;
 
+	LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	bool LoadImageR();
+	void OnLRVolumeSet();
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();
@@ -44,4 +45,7 @@ protected:
 public:
 	afx_msg void OnFileExit();
 	afx_msg void OnFileOpenhighresvolume();
+	afx_msg void OnFileOpenlowresvolume();
+	afx_msg void OnBnClickedButtonUpdate();
+	afx_msg void OnFileOpenlastselection();
 };
