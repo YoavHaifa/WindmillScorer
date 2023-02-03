@@ -6,6 +6,7 @@
 #include "..\..\ImageRLib\MultiDataF.h"
 #include "..\..\ImageRLib\Smoother.h"
 #include "..\..\ImageRLib\Edger.h"
+#include "..\..\ImageRLib\ImageRIF.h"
 
 CWMAScorer gWMAScorer;
 
@@ -26,6 +27,8 @@ CWMAScorer::CWMAScorer()
 	, mpPrepDiff(NULL)
 	, mpEdge(NULL)
 	, mpAux(NULL)
+	, mpImageRIF(NULL)
+	, mpSharedImage(NULL)
 	, mpSmoother(NULL)
 	, miCurrent(0)
 	, mnCols(0)
@@ -88,6 +91,9 @@ CWMAScorer::~CWMAScorer()
 	if (mpDirAmpSmooth)
 		delete mpDirAmpSmooth;
 
+	if (mpSharedImage)
+		delete mpSharedImage;
+
 	if (mpSmoother)
 		delete mpSmoother;
 }
@@ -126,6 +132,7 @@ void CWMAScorer::SetLRVolume(const char* zfName)
 		mpDirAmp = new CTImage<float>("DirAmp", mnLines, mnCols);
 		mpDirAmpCons = new CTImage<float>("DirAmpCons", mnLines, mnCols);
 		mpDirAmpSmooth = new CTImage<float>("DirAmpSmooth", mnLines, mnCols);
+
 		mpSmoother = new CSmoother(mnLines, mnCols);
 	}
 	mfLog.Flush("<SetLRVolume>", zfName);
@@ -193,6 +200,8 @@ float CWMAScorer::ComputeScore()
 	mfLog.Flush("<ComputeScore> Prep diff score", scorePrep);
 
 	mfLog.Flush("<ComputeScore> score", score);
+
+	Display(mpDirAmpSmooth);
 	return score;
 }
 void CWMAScorer::ComputeDiff()
@@ -558,4 +567,20 @@ float CWMAScorer::FindMax(CTImage<float>* pImage)
 			maxVal = value;
 	}
 	return maxVal;
+}
+void CWMAScorer::Display(CTImage<float>* pImage)
+{
+	if (!mpImageRIF)
+		return;
+
+	if (!mpSharedImage)
+	{
+		mpSharedImage = new CTSharedImage<float>("SharedImage", mnLines, mnCols);
+		mpSharedImage->SetZoomName("SharedZoom");
+	}
+
+	mpSharedImage->StartWrite();
+	mpSharedImage->CopyFromRaster(pImage->GetData());
+	mpSharedImage->OnPageUpdate(0);
+	mpImageRIF->DisplayShared(mpSharedImage);
 }

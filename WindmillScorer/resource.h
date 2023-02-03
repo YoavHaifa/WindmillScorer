@@ -12,6 +12,7 @@
 #define IDC_EDIT_I_IMAGE                1001
 #define IDC_EDIT_SCORE                  1002
 #define IDC_BUTTON_UPDATE               1003
+#define IDC_STATIC_STATUS2              1004
 #define ID_FILE_OPENHIGHRESVOLUME       32771
 #define ID_FILE_OPENLOWRESVOLUME        32772
 #define ID_FILE_EXIT                    32773

@@ -1,12 +1,15 @@
 #pragma once
 #include "..\..\yUtils\LogFile.h"
 #include "..\..\ImageRLib\TImage.h"
+#include "..\..\ImageRLib\TSharedImage.h"
 
 class CWMAScorer
 {
 public:
 	CWMAScorer();
 	~CWMAScorer();
+
+	void SetImageRIF(class CImageRIF* pImageRIF) { mpImageRIF = pImageRIF; }
 
 	void SetHRVolume(const char* zfName);
 	void SetLRVolume(const char* zfName);
@@ -37,6 +40,8 @@ private:
 	void Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes);
 	void Sort2(float v1, float v2, float& oMin, float& oMax);
 
+	void Display(CTImage<float>* pImage);
+
 	CTImage<float>* mpOrig;
 	CTImage<float>* mpDiff;
 	CTImage<float>* mpEdge;
@@ -51,6 +56,10 @@ private:
 	CTImage<float>* mpDirAmp;
 	CTImage<float>* mpDirAmpCons;
 	CTImage<float>* mpDirAmpSmooth;
+
+	class CImageRIF* mpImageRIF;
+	CTSharedImage<float>* mpSharedImage;
+
 
 	class CSmoother* mpSmoother;
 

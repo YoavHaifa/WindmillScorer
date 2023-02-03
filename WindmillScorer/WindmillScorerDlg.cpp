@@ -127,6 +127,7 @@ BOOL CWindmillScorerDlg::OnInitDialog()
 
 	// TODO: Add extra initialization here
 	SetStatusWindow(IDC_STATIC_STATUS);
+	SetStatusWindow1(IDC_STATIC_STATUS2);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -238,6 +239,8 @@ bool CWindmillScorerDlg::LoadImageR()
 	mpImageRIF->SetViewerBroadPos();
 	mpImageRIF->SetIndicesToUpdatePosition2d(miPos, miPos2d);
 	mpImageRIF->SetWindow(100, 500);
+
+	gWMAScorer.SetImageRIF(mpImageRIF);
 	return true;
 }
 
@@ -250,6 +253,10 @@ LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lPara
 		bool bChange = false;
 		if (mpImageRIF->GetPositionMessage(message, wParam, lParam, bChange))
 		{
+			static int uCount = 0;
+			sprintf_s(zBuf, sizeof(zBuf), "<WindowProc> Position Messgae(%d) %d %d", ++uCount, (int)wParam, (int)lParam);
+			CMyWindows::PrintStatus1(zBuf);
+
 			if (bChange)
 			{
 				if (message == CPosition::umaPositionMsg[0])
