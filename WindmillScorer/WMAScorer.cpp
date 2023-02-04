@@ -9,36 +9,29 @@
 #include "..\..\ImageRLib\ImageRIF.h"
 #include "..\..\ImageRLib\DataRoi.h"
 #include "Config.h"
-#include "DirectedDiff.h"
+#include "DirScore.h"
+//#include "DirectedDiff.h"
 #include "WindmillScorerDlg.h"
 
 CWMAScorer gWMAScorer;
 
 CWMAScorer::CWMAScorer()
-	: mpHRImages(NULL)
+	: CBaseScorer("CWMAScorer")
+	, mpHRImages(NULL)
 	, mpLRImages(NULL)
 	, mpOrig(NULL)
 	, mpDiff(NULL)
-	, mpNegDir(NULL)
-	, mpPosDir(NULL)
-	, mpDirAmp(NULL)
-	, mpDirAmpSmooth(NULL)
-	, mpDirAmpCons(NULL)
 	, mpPrepDiff(NULL)
 	, mpEdge(NULL)
 	, mpAux(NULL)
-	, mpImageRIF(NULL)
-	, mpSmoother(NULL)
-	, miCurrentImage(0)
-	, mnCols(0)
-	, mnLines(0)
-	, mnPixelsPerImage(0)
 	, mRoiRadius(20)
-	, mnImages(0)
+	, miSelectedDir(-1)
 	, mDebug(15)
 	, mDump(15)
 	, mfLog("WMAScorer")
 {
+	for (int i = 0; i < MAX_DIRS; i++)
+		mapDirScore[i] = NULL;
 }
 CWMAScorer::~CWMAScorer()
 {
@@ -63,23 +56,11 @@ CWMAScorer::~CWMAScorer()
 	if (mpPrepDiff)
 		delete mpPrepDiff;
 
-	if (mpNegDir)
-		delete mpNegDir;
-
-	if (mpPosDir)
-		delete mpPosDir;
-
-	if (mpDirAmp)
-		delete mpDirAmp;
-
-	if (mpDirAmpCons)
-		delete mpDirAmpCons;
-
-	if (mpDirAmpSmooth)
-		delete mpDirAmpSmooth;
-
-	if (mpSmoother)
-		delete mpSmoother;
+	for (int i = 0; i < MAX_DIRS; i++)
+	{
+		if (mapDirScore[i])
+			delete mapDirScore[i];
+	}
 }
 void CWMAScorer::StartBackgroundThread()
 {
@@ -94,10 +75,14 @@ void CWMAScorer::BGThread()
 {
 	while (true)
 	{
-		if (miCurrentImage != gConfig.miCurrentImage)
+		if (umiCurrentImage != gConfig.miCurrentImage)
 		{
 			if (SetCurrent(gConfig.miCurrentImage))
+			{
+				SaveSelection();
+				mfLog.Flush("<SetCurrent>", umiCurrentImage);
 				ComputeScore();
+			}
 			else
 				Sleep(100);
 		}
@@ -108,14 +93,14 @@ void CWMAScorer::BGThread()
 void CWMAScorer::SetHRVolume(const char* zfName)
 {
 	mpHRImages = new CMultiDataF(zfName);
-	mnImages = mpHRImages->GetNPages();
-	if (gConfig.miCurrentImage < 0 || gConfig.miCurrentImage >= mnImages)
-		gConfig.SetPosition(mnImages / 2);
+	umnImages = mpHRImages->GetNPages();
+	if (gConfig.miCurrentImage < 1 || gConfig.miCurrentImage > umnImages)
+		gConfig.SetPosition(umnImages / 2);
 
-	mpHRImages->SetCurrent(gConfig.miCurrentImage);
-	mnLines = mpHRImages->GetNLinesInPage();
-	mnCols = mpHRImages->GetNCols();
-	mnPixelsPerImage = mnLines * mnCols;
+	//mpHRImages->SetCurrent(gConfig.miCurrentImage);
+	umnLines = mpHRImages->GetNLinesInPage();
+	umnCols = mpHRImages->GetNCols();
+	umnPixelsPerImage = umnLines * umnCols;
 	SaveSelection();
 	mfLog.Flush("<SetHRVolume>", zfName);
 	mpHRImages->LogImage(mfLog, gConfig.miCurrentImage);
@@ -128,37 +113,25 @@ void CWMAScorer::SetLRVolume(const char* zfName)
 
 	if (!mpDiff)
 	{
-		mpOrig = new CTImage<float>("Orig", mnLines, mnCols);
-		mpDiff = new CTImage<float>("Diff", mnLines, mnCols);
-		mpEdge = new CTImage<float>("Edge", mnLines, mnCols);
-		mpAux = new CTImage<float>("Aux", mnLines, mnCols);
-		mpPrepDiff = new CTSharedImage<float>("PrepDiff", mnLines, mnCols);
-		mpDirAmp = new CTSharedImage<float>("DirAmp", mnLines, mnCols);
-		mpDirAmpCons = new CTImage<float>("DirAmpCons", mnLines, mnCols);
-		mpDirAmpSmooth = new CTSharedImage<float>("DirAmpSmooth", mnLines, mnCols);
+		mpOrig = new CTImage<float>("Orig", umnLines, umnCols);
+		mpDiff = new CTImage<float>("Diff", umnLines, umnCols);
+		mpEdge = new CTImage<float>("Edge", umnLines, umnCols);
+		mpAux = new CTImage<float>("Aux", umnLines, umnCols);
+		mpPrepDiff = new CTSharedImage<float>("PrepDiff", umnLines, umnCols);
 
-		mpSmoother = new CSmoother(mnLines, mnCols);
+		for (int i = 0; i < MAX_DIRS; i++)
+		{
+			if (!mapDirScore[i])
+				mapDirScore[i] = new CDirScore(i+1);
+		}
+
+		umpSmoother = new CSmoother(umnLines, umnCols);
 
 		mpPrepDiff->SetWindowName("Diff");
-		mpDirAmp->SetWindowName("Amp");
-		mpDirAmpSmooth->SetWindowName("score");
 
 	}
 	mfLog.Flush("<SetLRVolume>", zfName);
 	mpHRImages->LogImage(mfLog, gConfig.miCurrentImage);
-}
-
-bool CWMAScorer::SetCurrent(int i) 
-{
-	if (i < 0)
-		return false;
-	if (i >= mnImages)
-		return false;
-
-	miCurrentImage = i;
-	SaveSelection();
-	mfLog.Flush("<SetCurrent>", i);
-	return true;
 }
 
 void CWMAScorer::SaveSelection()
@@ -198,32 +171,32 @@ bool CWMAScorer::OpenLastSelection()
 }
 float CWMAScorer::ComputeScore()
 {
-	mfLog.Flush("<ComputeScore> current", miCurrentImage);
-	mpHRImages->LogImage(mfLog, miCurrentImage);
-	mpLRImages->LogImage(mfLog, miCurrentImage);
+	mfLog.Flush("<ComputeScore> current", umiCurrentImage);
+	mpHRImages->LogImage(mfLog, umiCurrentImage);
+	mpLRImages->LogImage(mfLog, umiCurrentImage);
 
 	mpPrepDiff->StartWrite();
-	mpDirAmp->StartWrite();
-	mpDirAmpSmooth->StartWrite();
 
 	ComputeDiff();
 	MaskEdge();
 	PrepDiff();
-	if (!mpPosDir)
+
+	mScore = -1000000;
+	for (int iDir = 0; iDir < MAX_DIRS; iDir++)
 	{
-		mpPosDir = new CDirectedDiff(mpPrepDiff, true, miCurrentImage);
-		mpNegDir = new CDirectedDiff(mpPrepDiff, false, miCurrentImage);
-	}
-	else
-	{
-		mpPosDir->Update(mpPrepDiff, miCurrentImage);
-		mpNegDir->Update(mpPrepDiff, miCurrentImage);
+		float score = mapDirScore[iDir]->Compute(mpPrepDiff);
+		if (score > mScore)
+		{
+			miSelectedDir = iDir;
+			mScore = score;
+			mScoreCoo = mapDirScore[iDir]->GetScoreCoo();
+			CString s;
+			s.Format("<ComputeScore> dir %d, score %.2f", iDir + 1, score);
+			mfLog.Flush(s);
+			CMyWindows::PrintStatus(s);
+		}
 	}
 
-	//SeparatePosAndNegDiff();
-	//ComputeDiffDirs();
-	ComputeDiffDirsAmp();
-	mScore = FindMax(mpDirAmpSmooth);
 
 	float scoreOrig = ComputeAverageAbsDiff(mpDiff);
 	mfLog.Flush("<ComputeScore> Original diff score", scoreOrig);
@@ -240,12 +213,12 @@ float CWMAScorer::ComputeScore()
 }
 void CWMAScorer::ComputeDiff()
 {
-	float* pHR = mpHRImages->GetImageData(miCurrentImage);
-	float* pLR = mpLRImages->GetImageData(miCurrentImage);
+	float* pHR = mpHRImages->GetImageData(umiCurrentImage-1);
+	float* pLR = mpLRImages->GetImageData(umiCurrentImage-1);
 	float* pOrig = mpOrig->GetData();
 	float* pDiff = mpDiff->GetData();
 
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int i = 0; i < umnPixelsPerImage; i++)
 	{
 		pOrig[i] = pLR[i];
 		pDiff[i] = pLR[i] - pHR[i];
@@ -253,8 +226,8 @@ void CWMAScorer::ComputeDiff()
 
 	if (mDump)
 	{
-		mpOrig->Dump("WMA_Orig", miCurrentImage);
-		mpDiff->Dump("WMA_Diff", miCurrentImage);
+		mpOrig->Dump("WMA_Orig", umiCurrentImage);
+		mpDiff->Dump("WMA_Diff", umiCurrentImage);
 	}
 }
 
@@ -263,10 +236,10 @@ float CWMAScorer::ComputeAverageAbsDiff(CTImage<float>* pDiffImage)
 	float* pDiff = pDiffImage->GetData();
 
 	float sum = 0;
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int i = 0; i < umnPixelsPerImage; i++)
 		sum += abs(pDiff[i]);
 
-	return sum / mnPixelsPerImage;
+	return sum / umnPixelsPerImage;
 }
 
 void CWMAScorer::Sort2(float v1, float v2, float& oMin, float& oMax)
@@ -284,23 +257,23 @@ void CWMAScorer::Sort2(float v1, float v2, float& oMin, float& oMax)
 }
 void CWMAScorer::MaskEdge()
 {
-	CEdger edger(mnLines, mnCols, true /*bFloat*/);
+	CEdger edger(umnLines, umnCols, true /*bFloat*/);
 	edger.ComputeEdge(mpEdge->GetData(), mpOrig->GetData(), mpAux->GetData(), 5, 5);
 
 	float* pEdgeRaster = mpEdge->GetData();
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int i = 0; i < umnPixelsPerImage; i++)
 	{
 		pEdgeRaster[i] = abs(pEdgeRaster[i]);
 	}
 
-	mpSmoother->SetSmoothFactor(2);
-	mpSmoother->SmoothFloat(*mpAux, *mpEdge);
+	umpSmoother->SetSmoothFactor(2);
+	umpSmoother->SmoothFloat(*mpAux, *mpEdge);
 
 	float threshold = 50;
 	
 	float* pDiffRaster = mpDiff->GetData();
 	float* pSmoothEdgeRaster = mpAux->GetData();
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int i = 0; i < umnPixelsPerImage; i++)
 	{
 		if (pSmoothEdgeRaster[i] > threshold)
 			pDiffRaster[i] = 0;
@@ -308,9 +281,9 @@ void CWMAScorer::MaskEdge()
 
 	if (mDump)
 	{
-		mpEdge->Dump("WMA_Edge", miCurrentImage);
-		mpAux->Dump("WMA_EdgeSmooth", miCurrentImage);
-		mpDiff->Dump("WMA_DiffMasked", miCurrentImage);
+		mpEdge->Dump("WMA_Edge", umiCurrentImage);
+		mpAux->Dump("WMA_EdgeSmooth", umiCurrentImage);
+		mpDiff->Dump("WMA_DiffMasked", umiCurrentImage);
 	}
 }
 void CWMAScorer::PrepDiff()
@@ -320,13 +293,13 @@ void CWMAScorer::PrepDiff()
 	float* pDiffRaster = mpDiff->GetData();
 	float* pPrepRaster = mpPrepDiff->GetData();
 
-	for (int iLine = 1; iLine < mnLines - 1; iLine++)
+	for (int iLine = 1; iLine < umnLines - 1; iLine++)
 	{
-		float* pDiffPrevLine = pDiffRaster + (iLine - 1) * mnCols;
-		float* pDiffLine = pDiffRaster + iLine * mnCols;
-		float* pPrepLine = pPrepRaster + iLine * mnCols;
+		float* pDiffPrevLine = pDiffRaster + (iLine - 1) * umnCols;
+		float* pDiffLine = pDiffRaster + iLine * umnCols;
+		float* pPrepLine = pPrepRaster + iLine * umnCols;
 
-		for (int iCol = 1; iCol < mnCols - 1; iCol++)
+		for (int iCol = 1; iCol < umnCols - 1; iCol++)
 		{
 			float* pEnv = pDiffPrevLine + iCol - 1;
 			float curDiff = pDiffLine[iCol];
@@ -358,7 +331,7 @@ void CWMAScorer::PrepDiff()
 							}
 						}
 					}
-					pEnv += mnCols;
+					pEnv += umnCols;
 				}
 				if (nextMaxEnv <= 0)
 					pPrepLine[iCol] = 0;
@@ -392,7 +365,7 @@ void CWMAScorer::PrepDiff()
 							}
 						}
 					}
-					pEnv += mnCols;
+					pEnv += umnCols;
 				}
 				if (nextMinEnv >= 0)
 					pPrepLine[iCol] = 0;
@@ -402,220 +375,16 @@ void CWMAScorer::PrepDiff()
 		}
 	}
 
-	if (mDump)
-		mpPrepDiff->Dump("WMA_PrepDiff", miCurrentImage);		
+	DumpImage(mpPrepDiff);
 }
-/*
-void CWMAScorer::SeparatePosAndNegDiff()
-{
-	mpNegDiff->Zero();
-	mpPosDiff->Zero();
 
-	float* pPrepRaster = mpPrepDiff->GetData();
-	float* pNegRaster = mpNegDiff->GetData();
-	float* pPosRaster = mpPosDiff->GetData();
-
-	for (int i = 0; i < mnPixelsPerImage; i++)
-	{
-		float diff = pPrepRaster[i];
-		if (diff < 0)
-			pNegRaster[i] = -diff;
-		else if (diff > 0)
-			pPosRaster[i] = diff;
-	}
-
-	if (mDump)
-	{
-		mpNegDiff->Dump("WMA_NegDiff", miCurrentImage);
-		mpPosDiff->Dump("WMA_PosDiff", miCurrentImage);
-	}
-}*/
-/*
-void CWMAScorer::ComputeDiffDirs()
-{
-	ComputeDiffDir(mpNegDiff, mpNegDir);
-	ComputeDiffDir(mpPosDiff, mpPosDir);
-	if (mDump)
-	{
-		mpNegDir->Dump("WMA_NegDir", miCurrentImage);
-		mpPosDir->Dump("WMA_PosDir", miCurrentImage);
-	}
-}*/
-/*
-void CWMAScorer::ComputeDiffDir(CTImage<float>* pDiff, CTImage<float>* pDir)
-{
-	pDir->Zero();
-
-	float* pDiffRaster = pDiff->GetData();
-	float* pDirRaster = pDir->GetData();
-
-	for (int iLine = 1; iLine < mnLines - 1; iLine++)
-	{
-		float* pDiffPrevLine = pDiffRaster + (iLine - 1) * mnCols;
-		float* pDiffLine = pDiffPrevLine + mnCols;
-		float* pDiffNextLine = pDiffLine + mnCols;
-		float* pDirLine = pDirRaster + iLine * mnCols;
-
-		for (int iCol = 1; iCol < mnCols - 1; iCol++)
-		{
-			if (pDiffLine[iCol] == 0)
-				continue;
-
-			int iBestDir = 0;
-			float highest = 0;
-			int iDir = 1;
-
-			// Compare previous to next line
-			for (int iTry = -1; iTry < 2; iTry++)
-			{
-				float value = min(pDiffPrevLine[iCol + iTry], pDiffNextLine[iCol - iTry]);
-				if (value > highest)
-				{
-					highest = value;
-					iBestDir = iDir;
-				}
-				iDir++;
-			}
-			// Compare horizontal (current line)
-			float value = min(pDiffLine[iCol - 1], pDiffLine[iCol + 1]);
-			if (value > highest)
-			{
-				highest = value;
-				iBestDir = iDir;
-			}
-			pDirLine[iCol] = (float)iBestDir;
-		}
-	}
-}*/
-void CWMAScorer::ComputeDiffDirsAmp()
-{
-	Add(mpNegDir->GetAmp(), mpPosDir->GetAmp(), mpDirAmp);
-
-	if (mDump)
-	{
-		mpDirAmp->Dump("WMA_DirAmp1", miCurrentImage);
-	}
-
-	BoostConsistency();
-
-	mpSmoother->SetSmoothFactor(5);
-	mpSmoother->SmoothFloat(*mpDirAmpSmooth, *mpDirAmpCons);
-	if (mDump)
-	{
-		mpDirAmpCons->Dump("WMA_DirAmp1Cons", miCurrentImage);
-		mpDirAmpSmooth->Dump("WMA_DirAmp1Smooth5", miCurrentImage);
-	}
-}
-void CWMAScorer::BoostConsistency()
-{
-	mpDirAmpCons->Zero();
-
-	int delta = 4;
-	float* pAmp = mpDirAmp->GetData();
-	float *pCons = mpDirAmpCons->GetData();
-	int envSide = delta * 2 + 1;
-	int nInEnv = envSide * envSide;
-
-	for (int iLine = delta; iLine < mnLines - delta; iLine++)
-	{
-		float* pAmpLine = pAmp + iLine * mnCols;
-		float* pConsLine = pCons + iLine * mnCols;
-		for (int iCol = delta; iCol < mnCols - delta; iCol++)
-		{
-			float amp = pAmpLine[iCol];
-			if (amp == 0)
-				continue;
-
-			float low = amp / 2;
-			float high = amp * 2;
-
-			int n = 0;
-			for (int iL = iLine - delta; iL <= iLine + delta; iL++)
-			{
-				float *pEnvLine = pAmp + iL * mnCols;
-				for (int iC = iCol - delta; iC <= iCol + delta; iC++)
-				{
-					float ampEnv = pEnvLine[iC];
-					if (ampEnv >= low && ampEnv <= high)
-						n++;
-				}
-			}
-			pConsLine[iCol] = amp * n / nInEnv;
-		}
-	}
-}
-/*
-void CWMAScorer::ComputeDiffDirAmp(CTImage<float>* pDiff, CTImage<float>* pDir, CTImage<float>* pDirAmp, int iDir)
-{
-	pDirAmp->Zero();
-
-	int iPrev = iDir - 1;
-	if (iPrev < 1)
-		iPrev = 4;
-	int iNext = iDir + 1;
-	if (iNext > 4)
-		iNext = 1;
-
-	float* pDiffRaster = pDiff->GetData();
-	float* pDirRaster = pDir->GetData();
-	float* pAmpRaster = pDirAmp->GetData();
-
-	for (int i = 0; i < mnPixelsPerImage; i++)
-	{
-		float dir = pDirRaster[i];
-		if (dir)
-		{
-			float diff = pDiffRaster[i];
-			float amp = 0;
-			if (dir == iDir)
-				amp = diff * 3;
-			else if (dir == iPrev || dir == iNext)
-				amp = diff;
-			else
-				amp = -diff;
-			pAmpRaster[i] = amp;
-		}
-	}
-}*/
-void CWMAScorer::Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes)
-{
-	float* pRaster1 = pIm1->GetData();
-	float* pRaster2 = pIm2->GetData();
-	float* pResRaster = pRes->GetData();
-
-	for (int i = 0; i < mnPixelsPerImage; i++)
-		pResRaster[i] = pRaster1[i] + pRaster2[i];
-}
-float CWMAScorer::FindMax(CTImage<float>* pImage)
-{
-	float maxVal = -1000;
-
-	for (int iLine = 0; iLine < mnLines; iLine++)
-	{
-		float* pLine = pImage->GetLine(iLine);
-
-		for (int iCol = 0; iCol < mnCols; iCol++)
-		{
-			float value = pLine[iCol];
-			if (value > maxVal)
-			{
-				maxVal = value;
-				mScoreCoo.fy = (float)iLine;
-				mScoreCoo.fx = (float)iCol;
-			}
-		}
-	}
-	return maxVal;
-}
 void CWMAScorer::Display()
 {
 	mpPrepDiff->OnPageUpdate(0);
-	mpDirAmp->OnPageUpdate(0);
-	mpDirAmpSmooth->OnPageUpdate(0);
 
-	mpImageRIF->DisplayShared(mpPrepDiff);
-	mpImageRIF->DisplayShared(mpDirAmp);
-	mpImageRIF->DisplayShared(mpDirAmpSmooth);
+	umpImageRIF->DisplayShared(mpPrepDiff);
+
+	mapDirScore[miSelectedDir]->Display();
 
 	DisplayRoi();
 }
@@ -624,11 +393,11 @@ void CWMAScorer::DisplayRoi()
 	static int count = 0;
 	count++;
 	CString sName;
-	sName.Format("DemoRoi%d_%d_%d", count, miCurrentImage);
+	sName.Format("DemoRoi%d_%d_%d", count, umiCurrentImage);
 	CDataRoi* pRoi = new CDataRoi(NULL, sName, 0xff0080);
 
 	pRoi->InitEllipse(mScoreCoo, mRoiRadius);
-	pRoi->LockToPosition(miCurrentImage);
+	pRoi->LockToPosition(umiCurrentImage);
 	pRoi->SetDisplayOnAll(true);
 	pRoi->SetFixedCenter();
 
@@ -638,8 +407,10 @@ void CWMAScorer::DisplayRoi()
 
 	//pRoi->SetSaveToXml(true);
 	//pRoi->mbReportClientOnActivation = true;
-	mpImageRIF->DisplayGraphic(pRoi);
+	umpImageRIF->DisplayGraphic(pRoi);
+}
 
-	mpImageRIF->SetAutoWindow(mpDirAmp->Name(), mScoreCoo);
-	mpImageRIF->SetAutoWindow(mpDirAmpSmooth->Name(), mScoreCoo);
+void CWMAScorer::DisplayDir(int iDir)
+{
+	mapDirScore[iDir-1]->Display();
 }

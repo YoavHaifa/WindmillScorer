@@ -1,24 +1,20 @@
 #pragma once
+#include "BaseScorer.h"
 #include "..\..\yUtils\LogFile.h"
-#include "..\..\ImageRLib\TImage.h"
 #include "..\..\ImageRLib\TSharedImage.h"
 #include "..\..\ImageRLib\DataCoordinates.h"
 
-class CWMAScorer
+class CWMAScorer : public CBaseScorer
 {
 public:
 	CWMAScorer();
 	~CWMAScorer();
 
-	void SetImageRIF(class CImageRIF* pImageRIF) { mpImageRIF = pImageRIF; }
 
 	void SetHRVolume(const char* zfName);
 	void SetLRVolume(const char* zfName);
 
 	void StartBackgroundThread();
-
-	int GetCurrent() { return miCurrentImage; }
-	bool SetCurrent(int i);
 
 	bool OpenLastSelection();
 	float ComputeScore();
@@ -34,11 +30,7 @@ private:
 	float ComputeAverageAbsDiff(CTImage<float>* pDiffImage);
 	void MaskEdge();
 	void PrepDiff();
-	void ComputeDiffDirsAmp();
-	void BoostConsistency();
-	float FindMax(CTImage<float>* pImage);
 
-	void Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes);
 	void Sort2(float v1, float v2, float& oMin, float& oMax);
 
 	void Display();
@@ -49,33 +41,20 @@ private:
 	CTImage<float>* mpEdge;
 	CTImage<float>* mpAux;
 	CTSharedImage<float>* mpPrepDiff;
-	CTSharedImage<float>* mpDirAmp;
-	CTImage<float>* mpDirAmpCons;
-	CTSharedImage<float>* mpDirAmpSmooth;
 
-	class CDirectedDiff* mpPosDir;
-	class CDirectedDiff* mpNegDir;
+	class CDirScore* mapDirScore[MAX_DIRS];
+	int miSelectedDir;
 
-	class CImageRIF* mpImageRIF;
 	//CTSharedImage<float>* mpSharedImage;
 
 
-	class CSmoother* mpSmoother;
-
-	int miCurrentImage;
-	int mnLines;
-	int mnCols;
-	int mnPixelsPerImage;
-	int mnImages;
-
-	// Current Score
-	float mScore;
-	CDataCoordinates mScoreCoo;
 	float mRoiRadius;
 
 	int mDebug;
 	int mDump;
 	CLogFile mfLog;
+public:
+	void DisplayDir(int iDir);
 };
 
 extern CWMAScorer gWMAScorer;

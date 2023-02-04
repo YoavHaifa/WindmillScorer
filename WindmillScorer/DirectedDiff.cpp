@@ -2,21 +2,18 @@
 #include "DirectedDiff.h"
 #include "Config.h"
 
-CDirectedDiff::CDirectedDiff(CTImage<float>* pPrepDiff, bool bPositive, int iCurrent)
-	: mnLines(pPrepDiff->mnLines)
-	, mnCols(pPrepDiff->mnCols)
-	, mnPixelsPerImage (mnLines * mnCols)
+CDirectedDiff::CDirectedDiff(CTImage<float>* pPrepDiff, bool bPositive, int iDir)
+	: CBaseScorer(bPositive ? "Pos" : "Neg", iDir)
 	, mbPositive(bPositive)
-	, miCurrent(iCurrent)
+	, miDir(iDir)
 	, mpDiff(NULL)
 	, mpDir(NULL)
-	, mpDirAmp(NULL)
-	, msName(bPositive? "Pos" : "Neg")
 {
-	mpDiff = new CTImage<float>(msName + "Diff", mnLines, mnCols);
-	mpDir = new CTImage<float>(msName + "Dir", mnLines, mnCols);
-	mpDirAmp = new CTImage<float>(msName + "DirAmp", mnLines, mnCols);
-	Update(pPrepDiff, miCurrent);
+	msName.Format("%s_Dir%d", bPositive ? "Pos" : "Neg", iDir);
+	mpDiff = new CTImage<float>(msName + "Diff", umnLines, umnCols);
+	mpDir = new CTImage<float>(msName + "Dir", umnLines, umnCols);
+	Init(); // Start mpScores
+	Update(pPrepDiff);
 }
 CDirectedDiff::~CDirectedDiff()
 {
@@ -24,16 +21,12 @@ CDirectedDiff::~CDirectedDiff()
 		delete mpDiff;
 	if (mpDir)
 		delete mpDir;
-	if (mpDirAmp)
-		delete mpDirAmp;
 }
-void CDirectedDiff::Update(CTImage<float>* pPrepDiff, int iCurrent)
+void CDirectedDiff::Update(CTImage<float>* pPrepDiff)
 {
-	int iDir = 1;
-	miCurrent = iCurrent;
 	GetSignedDiff(pPrepDiff);
 	ComputeDiffDir();
-	ComputeDiffDirAmp(iDir);
+	ComputeDiffDirAmp(miDir);
 }
 void CDirectedDiff::GetSignedDiff(CTImage<float>* pPrepDiff)
 {
@@ -44,7 +37,7 @@ void CDirectedDiff::GetSignedDiff(CTImage<float>* pPrepDiff)
 
 	if (mbPositive)
 	{
-		for (int i = 0; i < mnPixelsPerImage; i++)
+		for (int i = 0; i < umnPixelsPerImage; i++)
 		{
 			float diff = pPrepRaster[i];
 			if (diff > 0)
@@ -53,7 +46,7 @@ void CDirectedDiff::GetSignedDiff(CTImage<float>* pPrepDiff)
 	}
 	else
 	{
-		for (int i = 0; i < mnPixelsPerImage; i++)
+		for (int i = 0; i < umnPixelsPerImage; i++)
 		{
 			float diff = pPrepRaster[i];
 			if (diff < 0)
@@ -61,8 +54,7 @@ void CDirectedDiff::GetSignedDiff(CTImage<float>* pPrepDiff)
 		}
 	}
 
-	if (gConfig.mDump)
-		mpDiff->Dump(msName + "Diff", miCurrent);
+	DumpImage(mpDiff, "Diff");
 }
 void CDirectedDiff::ComputeDiffDir()
 {
@@ -71,14 +63,14 @@ void CDirectedDiff::ComputeDiffDir()
 	float* pDiffRaster = mpDiff->GetData();
 	float* pDirRaster = mpDir->GetData();
 
-	for (int iLine = 1; iLine < mnLines - 1; iLine++)
+	for (int iLine = 1; iLine < umnLines - 1; iLine++)
 	{
-		float* pDiffPrevLine = pDiffRaster + (iLine - 1) * mnCols;
-		float* pDiffLine = pDiffPrevLine + mnCols;
-		float* pDiffNextLine = pDiffLine + mnCols;
-		float* pDirLine = pDirRaster + iLine * mnCols;
+		float* pDiffPrevLine = pDiffRaster + (iLine - 1) * umnCols;
+		float* pDiffLine = pDiffPrevLine + umnCols;
+		float* pDiffNextLine = pDiffLine + umnCols;
+		float* pDirLine = pDirRaster + iLine * umnCols;
 
-		for (int iCol = 1; iCol < mnCols - 1; iCol++)
+		for (int iCol = 1; iCol < umnCols - 1; iCol++)
 		{
 			if (pDiffLine[iCol] == 0)
 				continue;
@@ -109,12 +101,11 @@ void CDirectedDiff::ComputeDiffDir()
 		}
 	}
 
-	if (gConfig.mDump)
-		mpDir->Dump(msName + "Dir", miCurrent);
+	DumpImage(mpDir, "Dir");
 }
 void CDirectedDiff::ComputeDiffDirAmp(int iDir)
 {
-	mpDirAmp->Zero();
+	mpScores->Zero();
 
 	int iPrev = iDir - 1;
 	if (iPrev < 1)
@@ -125,9 +116,9 @@ void CDirectedDiff::ComputeDiffDirAmp(int iDir)
 
 	float* pDiffRaster = mpDiff->GetData();
 	float* pDirRaster = mpDir->GetData();
-	float* pAmpRaster = mpDirAmp->GetData();
+	float* pAmpRaster = mpScores->GetData();
 
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int i = 0; i < umnPixelsPerImage; i++)
 	{
 		float dir = pDirRaster[i];
 		if (dir)
@@ -144,6 +135,5 @@ void CDirectedDiff::ComputeDiffDirAmp(int iDir)
 		}
 	}
 
-	if (gConfig.mDump)
-		mpDirAmp->Dump(msName + "DirAmp", miCurrent);
+	DumpImage(mpScores, "DirAmp");
 }

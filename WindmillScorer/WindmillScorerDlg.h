@@ -54,4 +54,5 @@ public:
 	afx_msg void OnFileOpenlowresvolume();
 	afx_msg void OnBnClickedButtonUpdate();
 	afx_msg void OnFileOpenlastselection();
+	afx_msg void OnDisplaySelectdirdif();
 };

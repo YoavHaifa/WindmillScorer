@@ -9,6 +9,7 @@
 #include "afxdialogex.h"
 #include "..\..\yUtils\MyWindows.h"
 #include "..\..\yUtils\MyFileDialog.h"
+#include "..\..\yUtils\NameGetDialog.h"
 #include "..\..\ImageRLib\ImageRIF.h"
 #include "..\..\ImageRLib\Position.h"
 #include "..\..\ImageRLib\MultiDataF.h"
@@ -91,8 +92,9 @@ BEGIN_MESSAGE_MAP(CWindmillScorerDlg, CDialogEx)
 	ON_COMMAND(ID_FILE_EXIT, &CWindmillScorerDlg::OnFileExit)
 	ON_COMMAND(ID_FILE_OPENHIGHRESVOLUME, &CWindmillScorerDlg::OnFileOpenhighresvolume)
 	ON_COMMAND(ID_FILE_OPENLOWRESVOLUME, &CWindmillScorerDlg::OnFileOpenlowresvolume)
-	ON_BN_CLICKED(IDC_BUTTON_UPDATE, &CWindmillScorerDlg::OnBnClickedButtonUpdate)
+	ON_BN_CLICKED(IDC_BUTTON_UPDATE_WMA, &CWindmillScorerDlg::OnBnClickedButtonUpdate)
 	ON_COMMAND(ID_FILE_OPENLASTSELECTION, &CWindmillScorerDlg::OnFileOpenlastselection)
+	ON_COMMAND(ID_DISPLAY_SELECTDIRDIF, &CWindmillScorerDlg::OnDisplaySelectdirdif)
 END_MESSAGE_MAP()
 
 
@@ -315,7 +317,6 @@ void CWindmillScorerDlg::DisplayScore(float score)
 	SetParameter(IDC_EDIT_SCORE, score);
 	mbInitializing = false;
 }
-
 void CWindmillScorerDlg::OnFileOpenlastselection()
 {
 	if (!gWMAScorer.OpenLastSelection())
@@ -323,4 +324,13 @@ void CWindmillScorerDlg::OnFileOpenlastselection()
 
 	LoadImageR();
 	OnLRVolumeSet();
+}
+void CWindmillScorerDlg::OnDisplaySelectdirdif()
+{
+	int iDir;
+	CNameGetDialog::GetIntValue("Select Direction to Display (1-4)", iDir);
+	if (iDir < 1 || iDir > CBaseScorer::MAX_DIRS)
+		return;
+
+	gWMAScorer.DisplayDir(iDir);
 }

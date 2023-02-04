@@ -201,8 +201,10 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BaseScorer.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="DirectedDiff.h" />
+    <ClInclude Include="DirScore.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
@@ -212,8 +214,10 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     <ClInclude Include="WMAScorer.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BaseScorer.cpp" />
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="DirectedDiff.cpp" />
+    <ClCompile Include="DirScore.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
