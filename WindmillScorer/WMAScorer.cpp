@@ -7,7 +7,9 @@
 #include "..\..\ImageRLib\Smoother.h"
 #include "..\..\ImageRLib\Edger.h"
 #include "..\..\ImageRLib\ImageRIF.h"
+#include "Config.h"
 #include "DirectedDiff.h"
+#include "WindmillScorerDlg.h"
 
 CWMAScorer gWMAScorer;
 
@@ -25,12 +27,12 @@ CWMAScorer::CWMAScorer()
 	, mpEdge(NULL)
 	, mpAux(NULL)
 	, mpImageRIF(NULL)
-	, mpSharedImage(NULL)
 	, mpSmoother(NULL)
-	, miCurrent(0)
+	, miCurrentImage(0)
 	, mnCols(0)
 	, mnLines(0)
 	, mnPixelsPerImage(0)
+	, mnImages(0)
 	, mDebug(15)
 	, mDump(15)
 	, mfLog("WMAScorer")
@@ -74,24 +76,47 @@ CWMAScorer::~CWMAScorer()
 	if (mpDirAmpSmooth)
 		delete mpDirAmpSmooth;
 
-	if (mpSharedImage)
-		delete mpSharedImage;
-
 	if (mpSmoother)
 		delete mpSmoother;
 }
-
+void CWMAScorer::StartBackgroundThread()
+{
+	CMyWindows::CreateThread(CWMAScorer::StaticBGThread, NULL);
+}
+DWORD WINAPI CWMAScorer::StaticBGThread(LPVOID /*p*/)
+{
+	gWMAScorer.BGThread();
+	return 0;
+}
+void CWMAScorer::BGThread()
+{
+	while (true)
+	{
+		if (miCurrentImage != gConfig.miCurrentImage)
+		{
+			if (SetCurrent(gConfig.miCurrentImage))
+				ComputeScore();
+			else
+				Sleep(100);
+		}
+		else
+			Sleep(100);
+	}
+}
 void CWMAScorer::SetHRVolume(const char* zfName)
 {
 	mpHRImages = new CMultiDataF(zfName);
-	miCurrent = mpHRImages->GetNPages() / 2;
-	mpHRImages->SetCurrent(miCurrent);
+	mnImages = mpHRImages->GetNPages();
+	if (gConfig.miCurrentImage < 0 || gConfig.miCurrentImage >= mnImages)
+		gConfig.SetPosition(mnImages / 2);
+
+	mpHRImages->SetCurrent(gConfig.miCurrentImage);
 	mnLines = mpHRImages->GetNLinesInPage();
 	mnCols = mpHRImages->GetNCols();
 	mnPixelsPerImage = mnLines * mnCols;
 	SaveSelection();
 	mfLog.Flush("<SetHRVolume>", zfName);
-	mpHRImages->LogImage(mfLog, miCurrent);
+	mpHRImages->LogImage(mfLog, gConfig.miCurrentImage);
 }
 
 void CWMAScorer::SetLRVolume(const char* zfName)
@@ -105,21 +130,33 @@ void CWMAScorer::SetLRVolume(const char* zfName)
 		mpDiff = new CTImage<float>("Diff", mnLines, mnCols);
 		mpEdge = new CTImage<float>("Edge", mnLines, mnCols);
 		mpAux = new CTImage<float>("Aux", mnLines, mnCols);
-		mpPrepDiff = new CTImage<float>("PrepDiff", mnLines, mnCols);
-		mpDirAmp = new CTImage<float>("DirAmp", mnLines, mnCols);
+		mpPrepDiff = new CTSharedImage<float>("PrepDiff", mnLines, mnCols);
+		mpDirAmp = new CTSharedImage<float>("DirAmp", mnLines, mnCols);
 		mpDirAmpCons = new CTImage<float>("DirAmpCons", mnLines, mnCols);
-		mpDirAmpSmooth = new CTImage<float>("DirAmpSmooth", mnLines, mnCols);
+		mpDirAmpSmooth = new CTSharedImage<float>("DirAmpSmooth", mnLines, mnCols);
 
 		mpSmoother = new CSmoother(mnLines, mnCols);
+
+		mpPrepDiff->SetWindowName("Diff");
+		mpDirAmp->SetWindowName("Amp");
+		mpDirAmpSmooth->SetWindowName("score");
+
 	}
 	mfLog.Flush("<SetLRVolume>", zfName);
-	mpHRImages->LogImage(mfLog, miCurrent);
+	mpHRImages->LogImage(mfLog, gConfig.miCurrentImage);
 }
 
-void CWMAScorer::SetCurrent(int i) 
+bool CWMAScorer::SetCurrent(int i) 
 {
-	miCurrent = i;
+	if (i < 0)
+		return false;
+	if (i >= mnImages)
+		return false;
+
+	miCurrentImage = i;
 	SaveSelection();
+	mfLog.Flush("<SetCurrent>", i);
+	return true;
 }
 
 void CWMAScorer::SaveSelection()
@@ -131,7 +168,7 @@ void CWMAScorer::SaveSelection()
 	dump.Write("hr_volume", mpHRImages->Name());
 	if (mpLRImages)
 		dump.Write("lr_volume", mpLRImages->Name());
-	dump.Write("current", miCurrent);
+	dump.Write("current", gConfig.miCurrentImage);
 }
 
 bool CWMAScorer::OpenLastSelection()
@@ -141,6 +178,8 @@ bool CWMAScorer::OpenLastSelection()
 	CXMLParseNode* pRoot = parse.GetRoot();
 	if (!pRoot)
 		return false;
+
+	pRoot->GetValue("current", gConfig.miCurrentImage);
 
 	CString s;
 	if (pRoot->GetValue("hr_volume", s))
@@ -153,27 +192,30 @@ bool CWMAScorer::OpenLastSelection()
 	else
 		return false;
 
-	pRoot->GetValue("current", miCurrent);
 	return true;
 }
 float CWMAScorer::ComputeScore()
 {
-	mfLog.Flush("<ComputeScore> current", miCurrent);
-	mpHRImages->LogImage(mfLog, miCurrent);
-	mpLRImages->LogImage(mfLog, miCurrent);
+	mfLog.Flush("<ComputeScore> current", miCurrentImage);
+	mpHRImages->LogImage(mfLog, miCurrentImage);
+	mpLRImages->LogImage(mfLog, miCurrentImage);
+
+	mpPrepDiff->StartWrite();
+	mpDirAmp->StartWrite();
+	mpDirAmpSmooth->StartWrite();
 
 	ComputeDiff();
 	MaskEdge();
 	PrepDiff();
 	if (!mpPosDir)
 	{
-		mpPosDir = new CDirectedDiff(mpPrepDiff, true, miCurrent);
-		mpNegDir = new CDirectedDiff(mpPrepDiff, false, miCurrent);
+		mpPosDir = new CDirectedDiff(mpPrepDiff, true, miCurrentImage);
+		mpNegDir = new CDirectedDiff(mpPrepDiff, false, miCurrentImage);
 	}
 	else
 	{
-		mpPosDir->Update(mpPrepDiff, miCurrent);
-		mpNegDir->Update(mpPrepDiff, miCurrent);
+		mpPosDir->Update(mpPrepDiff, miCurrentImage);
+		mpNegDir->Update(mpPrepDiff, miCurrentImage);
 	}
 
 	//SeparatePosAndNegDiff();
@@ -189,13 +231,15 @@ float CWMAScorer::ComputeScore()
 
 	mfLog.Flush("<ComputeScore> score", score);
 
-	Display(mpDirAmpSmooth);
+	Display();
+	if (CWindmillScorerDlg::umpDlg)
+		CWindmillScorerDlg::umpDlg->DisplayScore(score);
 	return score;
 }
 void CWMAScorer::ComputeDiff()
 {
-	float* pHR = mpHRImages->GetImageData(miCurrent);
-	float* pLR = mpLRImages->GetImageData(miCurrent);
+	float* pHR = mpHRImages->GetImageData(miCurrentImage);
+	float* pLR = mpLRImages->GetImageData(miCurrentImage);
 	float* pOrig = mpOrig->GetData();
 	float* pDiff = mpDiff->GetData();
 
@@ -207,8 +251,8 @@ void CWMAScorer::ComputeDiff()
 
 	if (mDump)
 	{
-		mpOrig->Dump("WMA_Orig", miCurrent);
-		mpDiff->Dump("WMA_Diff", miCurrent);
+		mpOrig->Dump("WMA_Orig", miCurrentImage);
+		mpDiff->Dump("WMA_Diff", miCurrentImage);
 	}
 }
 
@@ -262,9 +306,9 @@ void CWMAScorer::MaskEdge()
 
 	if (mDump)
 	{
-		mpEdge->Dump("WMA_Edge", miCurrent);
-		mpAux->Dump("WMA_EdgeSmooth", miCurrent);
-		mpDiff->Dump("WMA_DiffMasked", miCurrent);
+		mpEdge->Dump("WMA_Edge", miCurrentImage);
+		mpAux->Dump("WMA_EdgeSmooth", miCurrentImage);
+		mpDiff->Dump("WMA_DiffMasked", miCurrentImage);
 	}
 }
 void CWMAScorer::PrepDiff()
@@ -357,7 +401,7 @@ void CWMAScorer::PrepDiff()
 	}
 
 	if (mDump)
-		mpPrepDiff->Dump("WMA_PrepDiff", miCurrent);		
+		mpPrepDiff->Dump("WMA_PrepDiff", miCurrentImage);		
 }
 /*
 void CWMAScorer::SeparatePosAndNegDiff()
@@ -380,8 +424,8 @@ void CWMAScorer::SeparatePosAndNegDiff()
 
 	if (mDump)
 	{
-		mpNegDiff->Dump("WMA_NegDiff", miCurrent);
-		mpPosDiff->Dump("WMA_PosDiff", miCurrent);
+		mpNegDiff->Dump("WMA_NegDiff", miCurrentImage);
+		mpPosDiff->Dump("WMA_PosDiff", miCurrentImage);
 	}
 }*/
 /*
@@ -391,8 +435,8 @@ void CWMAScorer::ComputeDiffDirs()
 	ComputeDiffDir(mpPosDiff, mpPosDir);
 	if (mDump)
 	{
-		mpNegDir->Dump("WMA_NegDir", miCurrent);
-		mpPosDir->Dump("WMA_PosDir", miCurrent);
+		mpNegDir->Dump("WMA_NegDir", miCurrentImage);
+		mpPosDir->Dump("WMA_PosDir", miCurrentImage);
 	}
 }*/
 /*
@@ -443,15 +487,11 @@ void CWMAScorer::ComputeDiffDir(CTImage<float>* pDiff, CTImage<float>* pDir)
 }*/
 void CWMAScorer::ComputeDiffDirsAmp()
 {
-	//ComputeDiffDirAmp(mpNegDiff, mpNegDir, mpNegDirAmp, 1);
-	//ComputeDiffDirAmp(mpPosDiff, mpPosDir, mpPosDirAmp, 1);
 	Add(mpNegDir->GetAmp(), mpPosDir->GetAmp(), mpDirAmp);
-	//mpSmoother->SmoothFloat(*mpDirAmpSmooth, *mpDirAmp);
 
 	if (mDump)
 	{
-		mpDirAmp->Dump("WMA_DirAmp1", miCurrent);
-		//mpDirAmpSmooth->Dump("WMA_DirAmp1Smooth1", miCurrent);
+		mpDirAmp->Dump("WMA_DirAmp1", miCurrentImage);
 	}
 
 	BoostConsistency();
@@ -460,8 +500,8 @@ void CWMAScorer::ComputeDiffDirsAmp()
 	mpSmoother->SmoothFloat(*mpDirAmpSmooth, *mpDirAmpCons);
 	if (mDump)
 	{
-		mpDirAmpCons->Dump("WMA_DirAmp1Cons", miCurrent);
-		mpDirAmpSmooth->Dump("WMA_DirAmp1Smooth5", miCurrent);
+		mpDirAmpCons->Dump("WMA_DirAmp1Cons", miCurrentImage);
+		mpDirAmpSmooth->Dump("WMA_DirAmp1Smooth5", miCurrentImage);
 	}
 }
 void CWMAScorer::BoostConsistency()
@@ -557,19 +597,13 @@ float CWMAScorer::FindMax(CTImage<float>* pImage)
 	}
 	return maxVal;
 }
-void CWMAScorer::Display(CTImage<float>* pImage)
+void CWMAScorer::Display()
 {
-	if (!mpImageRIF)
-		return;
+	mpPrepDiff->OnPageUpdate(0);
+	mpDirAmp->OnPageUpdate(0);
+	mpDirAmpSmooth->OnPageUpdate(0);
 
-	if (!mpSharedImage)
-	{
-		mpSharedImage = new CTSharedImage<float>("SharedImage", mnLines, mnCols);
-		mpSharedImage->SetZoomName("SharedZoom");
-	}
-
-	mpSharedImage->StartWrite();
-	mpSharedImage->CopyFromRaster(pImage->GetData());
-	mpSharedImage->OnPageUpdate(0);
-	mpImageRIF->DisplayShared(mpSharedImage);
+	mpImageRIF->DisplayShared(mpPrepDiff);
+	mpImageRIF->DisplayShared(mpDirAmp);
+	mpImageRIF->DisplayShared(mpDirAmpSmooth);
 }

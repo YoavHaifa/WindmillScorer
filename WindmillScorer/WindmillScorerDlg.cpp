@@ -19,6 +19,7 @@
 #define new DEBUG_NEW
 #endif
 
+CWindmillScorerDlg* CWindmillScorerDlg::umpDlg = NULL;
 
 // CAboutDlg dialog used for App About
 
@@ -63,6 +64,7 @@ CWindmillScorerDlg::CWindmillScorerDlg(CWnd* pParent /*=nullptr*/)
 	, mfLog("WindmillScorerDlg")
 	, miPos(0)
 	, miPos2d(0)
+	, mbInitializing(true)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -129,6 +131,7 @@ BOOL CWindmillScorerDlg::OnInitDialog()
 	SetStatusWindow(IDC_STATIC_STATUS);
 	SetStatusWindow1(IDC_STATIC_STATUS2);
 
+	umpDlg = this;
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -221,6 +224,8 @@ void CWindmillScorerDlg::OnLRVolumeSet()
 {
 	mpImageRIF->FileOpen(gWMAScorer.mpLRImages->Name());
 	mpImageRIF->AddDiff();
+	Sleep(200);
+	gWMAScorer.StartBackgroundThread();
 }
 bool CWindmillScorerDlg::LoadImageR()
 {
@@ -236,7 +241,7 @@ bool CWindmillScorerDlg::LoadImageR()
 	mpImageRIF->SetNColumns(3);
 	CString sfName(gWMAScorer.mpHRImages->Name());
 	mpImageRIF->FileOpen(sfName);
-	mpImageRIF->SetPosition(sfName, gWMAScorer.GetCurrent());
+	mpImageRIF->SetPosition(sfName, gConfig.miCurrentImage);
 	mpImageRIF->SetViewerBroadPos();
 	mpImageRIF->SetIndicesToUpdatePosition2d(miPos, miPos2d);
 	mpImageRIF->SetWindow(100, 500);
@@ -244,13 +249,19 @@ bool CWindmillScorerDlg::LoadImageR()
 	gWMAScorer.SetImageRIF(mpImageRIF);
 	return true;
 }
-
+void CWindmillScorerDlg::DisplayPos()
+{
+	if (miPos < 1)
+		return;
+	SetParameter(IDC_EDIT_I_IMAGE, miPos);
+	OnBnClickedButtonUpdate();
+}
 LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	char zBuf[128];
 	if (mpImageRIF)
 	{
-		mfLog.Printf("<WindowProc> Message %d (%3d %3d)\n", message, wParam, lParam);
+		// mfLog.Printf("<WindowProc> Message %d (%3d %3d)\n", message, wParam, lParam);
 		bool bChange = false;
 		if (mpImageRIF->GetPositionMessage(message, wParam, lParam, bChange))
 		{
@@ -268,18 +279,10 @@ LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lPara
 						(int)lParam, (int)wParam);
 				mfLog.Printf("<WindowProc> Pos (%3d %3d)\n", miPos, miPos2d);
 
-				//DisplayPos();
+				if (!mbInitializing)
+					DisplayPos();
 				sprintf_s(zBuf, sizeof(zBuf), "<WindowProc> Position Messgae %d %d", (int)wParam, (int)lParam);
 				CMyWindows::PrintStatus(zBuf);
-				/*
-				if (mpImages)
-				{
-					CPosition* pPosition = mpImages->GetPosition();
-					if (miPos >= pPosition->miFirst && miPos <= pPosition->miLast)
-						mpImages->SetCurrent(miPos);
-				}*/
-				//if (mpSmoother)
-				//	UpdateSmooth();
 			}
 			return 0;
 		}
@@ -290,17 +293,27 @@ LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lPara
 
 void CWindmillScorerDlg::OnBnClickedButtonUpdate()
 {
-	if (!gWMAScorer.mpLRImages)
+	if (!gWMAScorer.mpLRImages || !gWMAScorer.mpHRImages || !mpImageRIF)
 		return;
 
 	int iImage = -1;
 	if (GetParameter(IDC_EDIT_I_IMAGE, iImage))
 	{
+		if (iImage < 1 || iImage > gWMAScorer.mpHRImages->GetNPages())
+			return;
+		if (iImage == gConfig.miCurrentImage)
+			return;
+
 		mpImageRIF->SetPosition(gWMAScorer.mpHRImages->Name(), iImage);
-		gWMAScorer.SetCurrent(iImage);
-		float score = gWMAScorer.ComputeScore();
-		SetParameter(IDC_EDIT_SCORE, score);
+		mfLog.Flush("<OnBnClickedButtonUpdate> iImage", iImage);
+		gConfig.SetPosition(iImage);
 	}
+}
+
+void CWindmillScorerDlg::DisplayScore(float score)
+{
+	SetParameter(IDC_EDIT_SCORE, score);
+	mbInitializing = false;
 }
 
 void CWindmillScorerDlg::OnFileOpenlastselection()

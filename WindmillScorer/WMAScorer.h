@@ -14,8 +14,10 @@ public:
 	void SetHRVolume(const char* zfName);
 	void SetLRVolume(const char* zfName);
 
-	int GetCurrent() { return miCurrent; }
-	void SetCurrent(int i);
+	void StartBackgroundThread();
+
+	int GetCurrent() { return miCurrentImage; }
+	bool SetCurrent(int i);
 
 	bool OpenLastSelection();
 	float ComputeScore();
@@ -24,6 +26,8 @@ public:
 	class CMultiDataF* mpLRImages;
 
 private:
+	static DWORD WINAPI StaticBGThread(LPVOID p);
+	void BGThread();
 	void SaveSelection();
 	void ComputeDiff();
 	float ComputeAverageAbsDiff(CTImage<float>* pDiffImage);
@@ -36,30 +40,31 @@ private:
 	void Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes);
 	void Sort2(float v1, float v2, float& oMin, float& oMax);
 
-	void Display(CTImage<float>* pImage);
+	void Display();
 
 	CTImage<float>* mpOrig;
 	CTImage<float>* mpDiff;
 	CTImage<float>* mpEdge;
 	CTImage<float>* mpAux;
-	CTImage<float>* mpPrepDiff;
-	CTImage<float>* mpDirAmp;
+	CTSharedImage<float>* mpPrepDiff;
+	CTSharedImage<float>* mpDirAmp;
 	CTImage<float>* mpDirAmpCons;
-	CTImage<float>* mpDirAmpSmooth;
+	CTSharedImage<float>* mpDirAmpSmooth;
 
 	class CDirectedDiff* mpPosDir;
 	class CDirectedDiff* mpNegDir;
 
 	class CImageRIF* mpImageRIF;
-	CTSharedImage<float>* mpSharedImage;
+	//CTSharedImage<float>* mpSharedImage;
 
 
 	class CSmoother* mpSmoother;
 
-	int miCurrent;
+	int miCurrentImage;
 	int mnLines;
 	int mnCols;
 	int mnPixelsPerImage;
+	int mnImages;
 
 	int mDebug;
 	int mDump;

@@ -15,6 +15,10 @@ public:
 	CWindmillScorerDlg(CWnd* pParent = nullptr);	// standard constructor
 	~CWindmillScorerDlg();
 
+	static CWindmillScorerDlg* umpDlg;
+
+	void DisplayScore(float score);
+
 // Dialog Data
 #ifdef AFX_DESIGN_TIME
 	enum { IDD = IDD_WINDMILLSCORER_DIALOG };
@@ -31,10 +35,12 @@ protected:
 	CLogFile mfLog;
 	int miPos;
 	int miPos2d;
+	bool mbInitializing;
 
 	LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	bool LoadImageR();
 	void OnLRVolumeSet();
+	void DisplayPos();
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();
