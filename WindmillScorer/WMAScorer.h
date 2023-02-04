@@ -29,14 +29,10 @@ private:
 	float ComputeAverageAbsDiff(CTImage<float>* pDiffImage);
 	void MaskEdge();
 	void PrepDiff();
-	void SeparatePosAndNegDiff();
-	void ComputeDiffDirs();
 	void ComputeDiffDirsAmp();
 	void BoostConsistency();
 	float FindMax(CTImage<float>* pImage);
 
-	void ComputeDiffDir(CTImage<float>* pDiff, CTImage<float>* pDir);
-	void ComputeDiffDirAmp(CTImage<float>* pDiff, CTImage<float>* pDir, CTImage<float>* pDirAmp, int iDir);
 	void Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes);
 	void Sort2(float v1, float v2, float& oMin, float& oMax);
 
@@ -47,15 +43,12 @@ private:
 	CTImage<float>* mpEdge;
 	CTImage<float>* mpAux;
 	CTImage<float>* mpPrepDiff;
-	CTImage<float>* mpNegDiff;
-	CTImage<float>* mpPosDiff;
-	CTImage<float>* mpNegDir;
-	CTImage<float>* mpPosDir;
-	CTImage<float>* mpNegDirAmp;
-	CTImage<float>* mpPosDirAmp;
 	CTImage<float>* mpDirAmp;
 	CTImage<float>* mpDirAmpCons;
 	CTImage<float>* mpDirAmpSmooth;
+
+	class CDirectedDiff* mpPosDir;
+	class CDirectedDiff* mpNegDir;
 
 	class CImageRIF* mpImageRIF;
 	CTSharedImage<float>* mpSharedImage;

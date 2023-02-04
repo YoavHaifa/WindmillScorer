@@ -233,6 +233,7 @@ bool CWindmillScorerDlg::LoadImageR()
 	//mpImageRIF = new CImageRIF(0, 0, false, gConfig.mDefaultImageRScreenX, gConfig.mDefaultImageRScreenY);
 	mpImageRIF = new CImageRIF(0, 0, false);
 	mpImageRIF->SetTitle("Windmill Scorer Viewer");
+	mpImageRIF->SetNColumns(3);
 	CString sfName(gWMAScorer.mpHRImages->Name());
 	mpImageRIF->FileOpen(sfName);
 	mpImageRIF->SetPosition(sfName, gWMAScorer.GetCurrent());

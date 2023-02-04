@@ -7,6 +7,7 @@
 #include "..\..\ImageRLib\Smoother.h"
 #include "..\..\ImageRLib\Edger.h"
 #include "..\..\ImageRLib\ImageRIF.h"
+#include "DirectedDiff.h"
 
 CWMAScorer gWMAScorer;
 
@@ -15,12 +16,8 @@ CWMAScorer::CWMAScorer()
 	, mpLRImages(NULL)
 	, mpOrig(NULL)
 	, mpDiff(NULL)
-	, mpNegDiff(NULL)
-	, mpPosDiff(NULL)
 	, mpNegDir(NULL)
 	, mpPosDir(NULL)
-	, mpNegDirAmp(NULL)
-	, mpPosDirAmp(NULL)
 	, mpDirAmp(NULL)
 	, mpDirAmpSmooth(NULL)
 	, mpDirAmpCons(NULL)
@@ -38,9 +35,7 @@ CWMAScorer::CWMAScorer()
 	, mDump(15)
 	, mfLog("WMAScorer")
 {
-
 }
-
 CWMAScorer::~CWMAScorer()
 {
 	if (mpHRImages)
@@ -64,23 +59,11 @@ CWMAScorer::~CWMAScorer()
 	if (mpPrepDiff)
 		delete mpPrepDiff;
 
-	if (mpNegDiff)
-		delete mpNegDiff;
-
-	if (mpPosDiff)
-		delete mpPosDiff;
-
 	if (mpNegDir)
 		delete mpNegDir;
 
 	if (mpPosDir)
 		delete mpPosDir;
-
-	if (mpNegDirAmp)
-		delete mpNegDirAmp;
-
-	if (mpPosDirAmp)
-		delete mpPosDirAmp;
 
 	if (mpDirAmp)
 		delete mpDirAmp;
@@ -123,12 +106,6 @@ void CWMAScorer::SetLRVolume(const char* zfName)
 		mpEdge = new CTImage<float>("Edge", mnLines, mnCols);
 		mpAux = new CTImage<float>("Aux", mnLines, mnCols);
 		mpPrepDiff = new CTImage<float>("PrepDiff", mnLines, mnCols);
-		mpNegDiff = new CTImage<float>("NegDiff", mnLines, mnCols);
-		mpPosDiff = new CTImage<float>("PosDiff", mnLines, mnCols);
-		mpNegDir = new CTImage<float>("NegDir", mnLines, mnCols);
-		mpPosDir = new CTImage<float>("PosDir", mnLines, mnCols);
-		mpNegDirAmp = new CTImage<float>("NegDir", mnLines, mnCols);
-		mpPosDirAmp = new CTImage<float>("PosDir", mnLines, mnCols);
 		mpDirAmp = new CTImage<float>("DirAmp", mnLines, mnCols);
 		mpDirAmpCons = new CTImage<float>("DirAmpCons", mnLines, mnCols);
 		mpDirAmpSmooth = new CTImage<float>("DirAmpSmooth", mnLines, mnCols);
@@ -188,8 +165,19 @@ float CWMAScorer::ComputeScore()
 	ComputeDiff();
 	MaskEdge();
 	PrepDiff();
-	SeparatePosAndNegDiff();
-	ComputeDiffDirs();
+	if (!mpPosDir)
+	{
+		mpPosDir = new CDirectedDiff(mpPrepDiff, true, miCurrent);
+		mpNegDir = new CDirectedDiff(mpPrepDiff, false, miCurrent);
+	}
+	else
+	{
+		mpPosDir->Update(mpPrepDiff, miCurrent);
+		mpNegDir->Update(mpPrepDiff, miCurrent);
+	}
+
+	//SeparatePosAndNegDiff();
+	//ComputeDiffDirs();
 	ComputeDiffDirsAmp();
 	float score = FindMax(mpDirAmpSmooth);
 
@@ -371,7 +359,7 @@ void CWMAScorer::PrepDiff()
 	if (mDump)
 		mpPrepDiff->Dump("WMA_PrepDiff", miCurrent);		
 }
-
+/*
 void CWMAScorer::SeparatePosAndNegDiff()
 {
 	mpNegDiff->Zero();
@@ -395,7 +383,8 @@ void CWMAScorer::SeparatePosAndNegDiff()
 		mpNegDiff->Dump("WMA_NegDiff", miCurrent);
 		mpPosDiff->Dump("WMA_PosDiff", miCurrent);
 	}
-}
+}*/
+/*
 void CWMAScorer::ComputeDiffDirs()
 {
 	ComputeDiffDir(mpNegDiff, mpNegDir);
@@ -405,7 +394,8 @@ void CWMAScorer::ComputeDiffDirs()
 		mpNegDir->Dump("WMA_NegDir", miCurrent);
 		mpPosDir->Dump("WMA_PosDir", miCurrent);
 	}
-}
+}*/
+/*
 void CWMAScorer::ComputeDiffDir(CTImage<float>* pDiff, CTImage<float>* pDir)
 {
 	pDir->Zero();
@@ -450,18 +440,16 @@ void CWMAScorer::ComputeDiffDir(CTImage<float>* pDiff, CTImage<float>* pDir)
 			pDirLine[iCol] = (float)iBestDir;
 		}
 	}
-}
+}*/
 void CWMAScorer::ComputeDiffDirsAmp()
 {
-	ComputeDiffDirAmp(mpNegDiff, mpNegDir, mpNegDirAmp, 1);
-	ComputeDiffDirAmp(mpPosDiff, mpPosDir, mpPosDirAmp, 1);
-	Add(mpNegDirAmp, mpPosDirAmp, mpDirAmp);
+	//ComputeDiffDirAmp(mpNegDiff, mpNegDir, mpNegDirAmp, 1);
+	//ComputeDiffDirAmp(mpPosDiff, mpPosDir, mpPosDirAmp, 1);
+	Add(mpNegDir->GetAmp(), mpPosDir->GetAmp(), mpDirAmp);
 	//mpSmoother->SmoothFloat(*mpDirAmpSmooth, *mpDirAmp);
 
 	if (mDump)
 	{
-		mpNegDirAmp->Dump("WMA_NegDirAmp1", miCurrent);
-		mpPosDirAmp->Dump("WMA_PosDirAmp1", miCurrent);
 		mpDirAmp->Dump("WMA_DirAmp1", miCurrent);
 		//mpDirAmpSmooth->Dump("WMA_DirAmp1Smooth1", miCurrent);
 	}
@@ -514,6 +502,7 @@ void CWMAScorer::BoostConsistency()
 		}
 	}
 }
+/*
 void CWMAScorer::ComputeDiffDirAmp(CTImage<float>* pDiff, CTImage<float>* pDir, CTImage<float>* pDirAmp, int iDir)
 {
 	pDirAmp->Zero();
@@ -545,7 +534,7 @@ void CWMAScorer::ComputeDiffDirAmp(CTImage<float>* pDiff, CTImage<float>* pDir, 
 			pAmpRaster[i] = amp;
 		}
 	}
-}
+}*/
 void CWMAScorer::Add(CTImage<float>* pIm1, CTImage<float>* pIm2, CTImage<float>* pRes)
 {
 	float* pRaster1 = pIm1->GetData();
