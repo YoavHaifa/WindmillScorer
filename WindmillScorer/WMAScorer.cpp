@@ -7,6 +7,7 @@
 #include "..\..\ImageRLib\Smoother.h"
 #include "..\..\ImageRLib\Edger.h"
 #include "..\..\ImageRLib\ImageRIF.h"
+#include "..\..\ImageRLib\DataRoi.h"
 #include "Config.h"
 #include "DirectedDiff.h"
 #include "WindmillScorerDlg.h"
@@ -32,6 +33,7 @@ CWMAScorer::CWMAScorer()
 	, mnCols(0)
 	, mnLines(0)
 	, mnPixelsPerImage(0)
+	, mRoiRadius(20)
 	, mnImages(0)
 	, mDebug(15)
 	, mDump(15)
@@ -221,7 +223,7 @@ float CWMAScorer::ComputeScore()
 	//SeparatePosAndNegDiff();
 	//ComputeDiffDirs();
 	ComputeDiffDirsAmp();
-	float score = FindMax(mpDirAmpSmooth);
+	mScore = FindMax(mpDirAmpSmooth);
 
 	float scoreOrig = ComputeAverageAbsDiff(mpDiff);
 	mfLog.Flush("<ComputeScore> Original diff score", scoreOrig);
@@ -229,12 +231,12 @@ float CWMAScorer::ComputeScore()
 	float scorePrep  = ComputeAverageAbsDiff(mpPrepDiff);
 	mfLog.Flush("<ComputeScore> Prep diff score", scorePrep);
 
-	mfLog.Flush("<ComputeScore> score", score);
+	mfLog.Flush("<ComputeScore> score", mScore);
 
 	Display();
 	if (CWindmillScorerDlg::umpDlg)
-		CWindmillScorerDlg::umpDlg->DisplayScore(score);
-	return score;
+		CWindmillScorerDlg::umpDlg->DisplayScore(mScore);
+	return mScore;
 }
 void CWMAScorer::ComputeDiff()
 {
@@ -588,12 +590,20 @@ float CWMAScorer::FindMax(CTImage<float>* pImage)
 {
 	float maxVal = -1000;
 
-	float* pRaster = pImage->GetData();
-	for (int i = 0; i < mnPixelsPerImage; i++)
+	for (int iLine = 0; iLine < mnLines; iLine++)
 	{
-		float value = pRaster[i];
-		if (value > maxVal)
-			maxVal = value;
+		float* pLine = pImage->GetLine(iLine);
+
+		for (int iCol = 0; iCol < mnCols; iCol++)
+		{
+			float value = pLine[iCol];
+			if (value > maxVal)
+			{
+				maxVal = value;
+				mScoreCoo.fy = (float)iLine;
+				mScoreCoo.fx = (float)iCol;
+			}
+		}
 	}
 	return maxVal;
 }
@@ -606,4 +616,30 @@ void CWMAScorer::Display()
 	mpImageRIF->DisplayShared(mpPrepDiff);
 	mpImageRIF->DisplayShared(mpDirAmp);
 	mpImageRIF->DisplayShared(mpDirAmpSmooth);
+
+	DisplayRoi();
+}
+void CWMAScorer::DisplayRoi()
+{
+	static int count = 0;
+	count++;
+	CString sName;
+	sName.Format("DemoRoi%d_%d_%d", count, miCurrentImage);
+	CDataRoi* pRoi = new CDataRoi(NULL, sName, 0xff0080);
+
+	pRoi->InitEllipse(mScoreCoo, mRoiRadius);
+	pRoi->LockToPosition(miCurrentImage);
+	pRoi->SetDisplayOnAll(true);
+	pRoi->SetFixedCenter();
+
+	CString sScore;
+	sScore.Format("WMA %.2f", mScore);
+	pRoi->SetText(sScore);
+
+	//pRoi->SetSaveToXml(true);
+	//pRoi->mbReportClientOnActivation = true;
+	mpImageRIF->DisplayGraphic(pRoi);
+
+	mpImageRIF->SetAutoWindow(mpDirAmp->Name(), mScoreCoo);
+	mpImageRIF->SetAutoWindow(mpDirAmpSmooth->Name(), mScoreCoo);
 }

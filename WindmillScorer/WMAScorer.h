@@ -2,6 +2,7 @@
 #include "..\..\yUtils\LogFile.h"
 #include "..\..\ImageRLib\TImage.h"
 #include "..\..\ImageRLib\TSharedImage.h"
+#include "..\..\ImageRLib\DataCoordinates.h"
 
 class CWMAScorer
 {
@@ -41,6 +42,7 @@ private:
 	void Sort2(float v1, float v2, float& oMin, float& oMax);
 
 	void Display();
+	void DisplayRoi();
 
 	CTImage<float>* mpOrig;
 	CTImage<float>* mpDiff;
@@ -65,6 +67,11 @@ private:
 	int mnCols;
 	int mnPixelsPerImage;
 	int mnImages;
+
+	// Current Score
+	float mScore;
+	CDataCoordinates mScoreCoo;
+	float mRoiRadius;
 
 	int mDebug;
 	int mDump;
