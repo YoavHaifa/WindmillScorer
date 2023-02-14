@@ -21,6 +21,5 @@ private:
 
 	CTImage<float>* mpDiff; // Always positive, >= 0
 	CTImage<float>* mpDir; // Directed diff
-	//CTImage<float>* mpDirAmp; // Directed and amplified
 };
 

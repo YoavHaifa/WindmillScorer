@@ -7,6 +7,7 @@ public:
 	void SetPosition(int iImage);
 
 	CString msDataRoot;
+	CString msHintsDir;
 
 	int miCurrentImage;
 	int mDebug;

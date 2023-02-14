@@ -55,4 +55,7 @@ public:
 	afx_msg void OnBnClickedButtonUpdate();
 	afx_msg void OnFileOpenlastselection();
 	afx_msg void OnDisplaySelectdirdif();
+	afx_msg void OnHintsAddwmaroi();
+	afx_msg void OnHintsAddcleanroi();
+	afx_msg void OnHintsSaveallhints();
 };

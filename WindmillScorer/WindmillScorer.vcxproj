@@ -206,6 +206,7 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     <ClInclude Include="DirectedDiff.h" />
     <ClInclude Include="DirScore.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="Hints.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
@@ -218,6 +219,7 @@ copy ..\..\ImageRLib\$(Platform)\$(Configuration)\ImageRLib.dll $(OutDir)</Comma
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="DirectedDiff.cpp" />
     <ClCompile Include="DirScore.cpp" />
+    <ClCompile Include="Hints.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

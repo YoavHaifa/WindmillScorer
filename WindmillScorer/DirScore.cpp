@@ -4,6 +4,9 @@
 #include "..\..\ImageRLib\Smoother.h"
 #include "..\..\ImageRLib\ImageRIF.h"
 
+CTSharedImage<float>* CDirScore::umpDirAmpShared = NULL;
+CTSharedImage<float>* CDirScore::umpScoresShared = NULL;
+
 CDirScore::CDirScore(int iDir)
 	: CBaseScorer("DirScore", iDir)
 	, miDir(iDir)
@@ -12,12 +15,18 @@ CDirScore::CDirScore(int iDir)
 	, mpDirAmp(NULL)
 	, mpDirAmpCons(NULL)
 {
-	mpDirAmp = new CTSharedImage<float>("DirAmp", umnLines, umnCols);
+	mpDirAmp = new CTImage<float>("DirAmp", umnLines, umnCols);
 	mpDirAmpCons = new CTImage<float>("DirAmpCons", umnLines, umnCols);
-	//mpDirAmpSmooth = new CTSharedImage<float>("DirAmpSmooth", umnLines, umnCols);
 
-	mpDirAmp->SetWindowName("Amp");
-	mpScores->SetWindowName("score");
+
+	if (!umpDirAmpShared)
+	{
+		umpDirAmpShared = new CTSharedImage<float>("DirAmp", umnLines, umnCols);
+		umpDirAmpShared->SetWindowName("Amp");
+
+		umpScoresShared = new CTSharedImage<float>("DirScore", umnLines, umnCols);
+		umpScoresShared->SetWindowName("Score");
+	}
 }
 CDirScore::~CDirScore()
 {
@@ -33,15 +42,8 @@ CDirScore::~CDirScore()
 	if (mpDirAmpCons)
 		delete mpDirAmpCons;
 }
-void CDirScore::StartWrite()
-{
-	mpDirAmp->StartWrite();
-	mpScores->StartWrite();
-}
 float CDirScore::Compute(CTImage<float>* pPrepDiff)
 {
-	StartWrite();
-
 	if (!mpPosDir)
 	{
 		mpPosDir = new CDirectedDiff(pPrepDiff, true, miDir);
@@ -57,16 +59,18 @@ float CDirScore::Compute(CTImage<float>* pPrepDiff)
 	mScore = FindMax(mpScores);
 	return mScore;
 }
+void CDirScore::Display1(CTSharedImage<float>& shared, CTImage<float>& image)
+{
+	shared.StartWrite();
+	shared.CopyFrom(image.GetData());
+	shared.OnPageUpdate(0);
+	umpImageRIF->DisplayShared(&shared);
+	umpImageRIF->SetAutoWindow(shared.Name(), mScoreCoo);
+}
 void CDirScore::Display()
 {
-	mpDirAmp->OnPageUpdate(0);
-	mpScores->OnPageUpdate(0);
-
-	umpImageRIF->DisplayShared(mpDirAmp);
-	umpImageRIF->DisplayShared(mpScores);
-
-	umpImageRIF->SetAutoWindow(mpDirAmp->Name(), mScoreCoo);
-	umpImageRIF->SetAutoWindow(mpScores->Name(), mScoreCoo);
+	Display1(*umpDirAmpShared, *mpDirAmp);
+	Display1(*umpScoresShared, *mpScores);
 }
 void CDirScore::ComputeDiffDirsAmp()
 {

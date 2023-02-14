@@ -13,8 +13,10 @@
 #include "..\..\ImageRLib\ImageRIF.h"
 #include "..\..\ImageRLib\Position.h"
 #include "..\..\ImageRLib\MultiDataF.h"
+#include "..\..\ImageRLib\GraphicElement.h"
 #include "Config.h"
 #include "WMAScorer.h"
+#include "Hints.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -95,6 +97,9 @@ BEGIN_MESSAGE_MAP(CWindmillScorerDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_UPDATE_WMA, &CWindmillScorerDlg::OnBnClickedButtonUpdate)
 	ON_COMMAND(ID_FILE_OPENLASTSELECTION, &CWindmillScorerDlg::OnFileOpenlastselection)
 	ON_COMMAND(ID_DISPLAY_SELECTDIRDIF, &CWindmillScorerDlg::OnDisplaySelectdirdif)
+	ON_COMMAND(ID_HINTS_ADDWMAROI, &CWindmillScorerDlg::OnHintsAddwmaroi)
+	ON_COMMAND(ID_HINTS_ADDCLEANROI, &CWindmillScorerDlg::OnHintsAddcleanroi)
+	ON_COMMAND(ID_HINTS_SAVEALLHINTS, &CWindmillScorerDlg::OnHintsSaveallhints)
 END_MESSAGE_MAP()
 
 
@@ -265,7 +270,16 @@ LRESULT CWindmillScorerDlg::WindowProc(UINT message, WPARAM wParam, LPARAM lPara
 	{
 		// mfLog.Printf("<WindowProc> Message %d (%3d %3d)\n", message, wParam, lParam);
 		bool bChange = false;
-		if (mpImageRIF->GetPositionMessage(message, wParam, lParam, bChange))
+		CGraphicElement* pGE = NULL;
+		if (mpImageRIF->GetGraphicMessage(message, wParam, lParam, bChange, &pGE))
+		{
+			sprintf_s(zBuf, sizeof(zBuf), "<WindowProc> Graphic Messgae %d (%d %d) %s", 
+				(int)message, (int)wParam, (int)lParam,
+				pGE ? (const char *)pGE->Name() : "NO GE");
+			CMyWindows::PrintStatus(zBuf);
+			return 0;
+		}
+		else if (mpImageRIF->GetPositionMessage(message, wParam, lParam, bChange))
 		{
 			static int uCount = 0;
 			sprintf_s(zBuf, sizeof(zBuf), "<WindowProc> Position Messgae(%d) %d %d", ++uCount, (int)wParam, (int)lParam);
@@ -311,7 +325,6 @@ void CWindmillScorerDlg::OnBnClickedButtonUpdate()
 		gConfig.SetPosition(iImage);
 	}
 }
-
 void CWindmillScorerDlg::DisplayScore(float score)
 {
 	SetParameter(IDC_EDIT_SCORE, score);
@@ -324,6 +337,7 @@ void CWindmillScorerDlg::OnFileOpenlastselection()
 
 	LoadImageR();
 	OnLRVolumeSet();
+	gHints.RestoreSavedHints();
 }
 void CWindmillScorerDlg::OnDisplaySelectdirdif()
 {
@@ -333,4 +347,16 @@ void CWindmillScorerDlg::OnDisplaySelectdirdif()
 		return;
 
 	gWMAScorer.DisplayDir(iDir);
+}
+void CWindmillScorerDlg::OnHintsAddwmaroi()
+{
+	gHints.AddRoi(true);
+}
+void CWindmillScorerDlg::OnHintsAddcleanroi()
+{
+	gHints.AddRoi(false);
+}
+void CWindmillScorerDlg::OnHintsSaveallhints()
+{
+	gHints.SaveAll();
 }

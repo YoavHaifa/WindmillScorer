@@ -14,13 +14,15 @@ public:
 private:
 	void ComputeDiffDirsAmp();
 	void BoostConsistency();
-	void StartWrite();
+	void Display1(CTSharedImage<float> &shared, CTImage<float> &image);
 
 	int miDir;
 
-	CTSharedImage<float>* mpDirAmp;
+	static CTSharedImage<float>* umpDirAmpShared;
+	static CTSharedImage<float>* umpScoresShared;
+
+	CTImage<float>* mpDirAmp;
 	CTImage<float>* mpDirAmpCons;
-	//CTSharedImage<float>* mpDirAmpSmooth;
 
 	class CDirectedDiff* mpPosDir;
 	class CDirectedDiff* mpNegDir;
