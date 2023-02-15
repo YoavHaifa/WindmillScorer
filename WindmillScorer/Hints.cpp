@@ -4,7 +4,9 @@
 #include "..\..\yUtils\XMLParse.h"
 #include "..\..\ImageRLib\ImageRIF.h"
 #include "..\..\ImageRLib\DataRoi.h"
+#include "..\..\ImageRLib\MultiDataF.h"
 #include "Config.h"
+#include "WMAScorer.h"
 
 CHints gHints;
 
@@ -55,10 +57,21 @@ void CHints::AddRoi(bool bWMA)
 	else
 		mCleanHints.AddTail(pRoi);
 }
+void CHints::CleanPreviousHints()
+{
+	CMyWindows::DeleteDirFiles(gConfig.msHintsDir);
+	CMyWindows::DeleteDirFiles(gConfig.msMasksDir);
+}
 void CHints::SaveAll()
 {
+	mpTarget = gWMAScorer.GetTarget();
+	mpTarget->Zero();
+
+	CleanPreviousHints();
 	SaveAll(mWMAHints);
 	SaveAll(mCleanHints);
+
+	mpTarget->SaveToFile();
 }
 void CHints::SaveAll(CList<CDataRoi*, CDataRoi*>& hints)
 {
@@ -67,6 +80,7 @@ void CHints::SaveAll(CList<CDataRoi*, CDataRoi*>& hints)
 	{
 		CDataRoi* pRoi = hints.GetNext(pos);
 		pRoi->SaveToDir(gConfig.msHintsDir);
+		SaveDataMask(pRoi);
 	}
 }
 void CHints::RestoreSavedHints()
@@ -112,5 +126,41 @@ void CHints::Display(CList<CDataRoi*, CDataRoi*>& hints)
 		CDataRoi* pRoi = hints.GetNext(pos);
 		pRoi->SaveToDir(gConfig.msHintsDir);
 		DisplayRoi(pRoi);
+	}
+}
+void CHints::SaveDataMask(CDataRoi* pRoi)
+{
+	CTImage<bool> mask(pRoi->Name() + "Mask", umnLines, umnCols);
+	mask.Zero();
+	pRoi->SetDataMask(mask);
+
+	CString sfName(gConfig.msMasksDir);
+	sfName += "\\";
+	sfName = mask.GetDumpName(sfName + mask.Name());
+	FILE* pf = MyFOpenWithErrorBox(sfName, "wb", "Dump Hint Mask");
+	if (!pf)
+		return;
+
+	mask.Dump(pf);
+	AddToTarget(mask);
+	fclose(pf);
+}
+void CHints::AddToTarget(CTImage<bool>& mask)
+{
+	int iImage = 0;
+	if (!CMyWindows::GetValueFromString(mask.msName, "_im", iImage))
+	{
+		CMyWindows::MessBox("<CHints::AddToTarget> bad name", "SW Error");
+		return;
+	}
+	bool bWMA = (mask.msName.Find("WMA_") >= 0);
+	float value = bWMA ? 1.0f : -1.0f;
+
+	bool* pMask = mask.GetData();
+	float* pImage = mpTarget->GetImageData(iImage);
+	for (int i = 0; i < umnPixelsPerImage; i++)
+	{
+		if (pMask[i])
+			pImage[i] = value;
 	}
 }

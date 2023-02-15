@@ -11,8 +11,12 @@ CConfig::CConfig()
 {
 	msDataRoot = "e:\\Windmill\\DATA for Scorer\\SCANPLAN_314_FOV450";
 	msHintsDir = msDataRoot + "\\WMAS_Hints";
+	msMasksDir = msDataRoot + "\\WMAS_Masks";
 	if (CMyWindows::IsDirectory(msDataRoot))
+	{
 		CMyWindows::VerifyDirectory(msHintsDir);
+		CMyWindows::VerifyDirectory(msMasksDir);
+	}
 }
 void CConfig::SetPosition(int iImage)
 {

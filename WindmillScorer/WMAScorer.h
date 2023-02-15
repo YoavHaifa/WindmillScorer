@@ -18,9 +18,11 @@ public:
 
 	bool OpenLastSelection();
 	float ComputeScore();
+	class CMultiDataF* GetTarget();
 
 	class CMultiDataF* mpHRImages;
 	class CMultiDataF* mpLRImages;
+	class CMultiDataF* mpTarget;
 
 private:
 	static DWORD WINAPI StaticBGThread(LPVOID p);

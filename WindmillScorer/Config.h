@@ -8,6 +8,7 @@ public:
 
 	CString msDataRoot;
 	CString msHintsDir;
+	CString msMasksDir;
 
 	int miCurrentImage;
 	int mDebug;

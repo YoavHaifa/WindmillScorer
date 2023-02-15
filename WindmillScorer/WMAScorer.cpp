@@ -19,6 +19,7 @@ CWMAScorer::CWMAScorer()
 	: CBaseScorer("CWMAScorer")
 	, mpHRImages(NULL)
 	, mpLRImages(NULL)
+	, mpTarget(NULL)
 	, mpOrig(NULL)
 	, mpDiff(NULL)
 	, mpPrepDiff(NULL)
@@ -40,6 +41,9 @@ CWMAScorer::~CWMAScorer()
 
 	if (mpLRImages)
 		delete mpLRImages;
+
+	if (mpTarget)
+		delete mpTarget;
 
 	if (mpOrig)
 		delete mpOrig;
@@ -131,9 +135,17 @@ void CWMAScorer::SetLRVolume(const char* zfName)
 
 	}
 	mfLog.Flush("<SetLRVolume>", zfName);
-	mpHRImages->LogImage(mfLog, gConfig.miCurrentImage);
+	mpLRImages->LogImage(mfLog, gConfig.miCurrentImage);
 }
+CMultiDataF* CWMAScorer::GetTarget()
+{
+	if (!mpHRImages)
+		return NULL;
 
+	if (!mpTarget)
+		mpTarget = new CMultiDataF(*mpHRImages, "Target");
+	return mpTarget;
+}
 void CWMAScorer::SaveSelection()
 {
 	if (!mpHRImages)
